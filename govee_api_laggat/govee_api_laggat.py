@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from govee_api_laggat.__version__ import VERSION
 from govee_api_laggat.api import GoveeApi
 from govee_api_laggat.ble import GoveeBle
-from govee_api_laggat.govee_dtos import GoveeDevice, GoveeSource
+from govee_api_laggat.govee_dtos import GoveeDevice, GoveeSource, GoveeDeviceMode
 from govee_api_laggat.learning_storage import (
     GoveeAbstractLearningStorage,
     GoveeLearnedInfo,
@@ -354,6 +354,13 @@ class Govee(object):
         success = False
         if self._api:
             return await self._api.set_brightness(device, brightness)
+        return success, ERR_MESSAGE_NO_ACTIVE_IMPL
+
+    async def set_device_mode(self, device: Union[str, GoveeDevice], device_mode: GoveeDeviceMode):
+        """Set mode of the device"""
+        success = False
+        if self._api:
+            return await self._api.set_device_mode(device, device_mode)
         return success, ERR_MESSAGE_NO_ACTIVE_IMPL
 
     async def _learn(self, device):

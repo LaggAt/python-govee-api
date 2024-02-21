@@ -11,10 +11,23 @@ class GoveeSource(Enum):
     BLE = "ble"
 
 
+class GoveeDeviceType(Enum):
+    """Defines the type of the device"""
+    DEVICE = "device"
+    APPLIANCE_DEVICE = "appliance_device"
+
+
+@dataclass
+class GoveeDeviceMode(object):
+    """Mode of a Govee device"""
+    name: str  # Name of the mode
+    value: str  # Value of this mode
+
+
 @dataclass
 class GoveeDevice(object):
     """Govee Device DTO."""
-
+    device_type: GoveeDeviceType  # type of this device. Defines which API  need to be used to control this device
     device: str  # name of the device, must e unique
     model: str  # model information
     device_name: str  # custom name of that device configured by user
@@ -25,8 +38,11 @@ class GoveeDevice(object):
     support_brightness: bool  # brightness control is supported
     support_color: bool  # color control is supported
     support_color_tem: bool  # color temperature control is supported
+    support_mode: bool  # supports the setting of a specific mode
     online: bool  # is the device online (connected to Govee API, and the library can connect the same API)
     power_state: bool  # On/Off state
+    modes: List[GoveeDeviceMode]  # modes the device can have (if device has mode functionality)
+    mode: GoveeDeviceMode
     brightness: int  # brightness state
     color: Tuple[int, int, int]  # color state
     color_temp: int  # color temperature state

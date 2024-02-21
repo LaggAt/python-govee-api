@@ -7,7 +7,7 @@ import math
 import ssl
 from typing import Any, List, Tuple, Union
 
-from govee_api_laggat.govee_dtos import GoveeDevice, GoveeSource
+from govee_api_laggat.govee_dtos import GoveeDevice, GoveeSource, GoveeDeviceType, GoveeDeviceMode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,6 +15,9 @@ _API_BASE_URL = "https://developer-api.govee.com"
 _API_DEVICES = _API_BASE_URL + "/v1/devices"
 _API_DEVICES_CONTROL = _API_BASE_URL + "/v1/devices/control"
 _API_DEVICES_STATE = _API_BASE_URL + "/v1/devices/state"
+_API_APPLIANCE_DEVICES = _API_BASE_URL + "/v1/appliance/devices"
+_API_APPLIANCE_DEVICES_CONTROL = _API_BASE_URL + "/v1/appliance/devices/control"
+
 # API rate limit header keys
 _RATELIMIT_TOTAL = "Rate-Limit-Total"  # The maximum number of requests you're permitted to make per minute.
 _RATELIMIT_REMAINING = "Rate-Limit-Remaining"  # The number of requests remaining in the current rate limit window.
@@ -49,9 +52,9 @@ class GoveeApi(object):
         self._session = None
 
     def __init__(
-        self,
-        govee,
-        api_key: str,
+            self,
+            govee,
+            api_key: str,
     ):
         """Init with an API_KEY and storage for learned values."""
         self._govee = govee
@@ -63,9 +66,9 @@ class GoveeApi(object):
 
     @classmethod
     async def create(
-        cls,
-        govee,
-        api_key: str,
+            cls,
+            govee,
+            api_key: str,
     ):
         """Use create method if you want to use this Client without an async context manager."""
         self = GoveeApi(govee, api_key)
@@ -86,9 +89,9 @@ class GoveeApi(object):
     async def _api_put(self, *, auth=True, url: str, json):
         """API HTTP Put call."""
         async with self._api_request_internal(
-            lambda: self._session.put(
-                url=url, headers=self._getHeaders(auth), json=json
-            )
+                lambda: self._session.put(
+                    url=url, headers=self._getHeaders(auth), json=json
+                )
         ) as response:
             yield response
 
@@ -96,9 +99,9 @@ class GoveeApi(object):
     async def _api_get(self, *, auth=True, url: str, params=None):
         """API HTTP Get call."""
         async with self._api_request_internal(
-            lambda: self._session.get(
-                url=url, headers=self._getHeaders(auth), params=params
-            )
+                lambda: self._session.get(
+                    url=url, headers=self._getHeaders(auth), params=params
+                )
         ) as response:
             yield response
 
@@ -126,7 +129,6 @@ class GoveeApi(object):
             err = "unknown error: %s" % repr(ex)
 
         if err:
-
             class error_response:
                 def __init__(self, err_msg):
                     self._err_msg = err_msg
@@ -146,9 +148,9 @@ class GoveeApi(object):
             )
         limit_unknown = True
         if (
-            _RATELIMIT_TOTAL in response.headers
-            and _RATELIMIT_REMAINING in response.headers
-            and _RATELIMIT_RESET in response.headers
+                _RATELIMIT_TOTAL in response.headers
+                and _RATELIMIT_REMAINING in response.headers
+                and _RATELIMIT_RESET in response.headers
         ):
             try:
                 self._limit = int(response.headers[_RATELIMIT_TOTAL])
@@ -232,13 +234,32 @@ class GoveeApi(object):
         _LOGGER.debug("get_devices")
         err = None
 
-        async with self._api_get(url=_API_DEVICES) as response:
+        devices_error = await self.__load_devices_of_type(GoveeDeviceType.DEVICE)
+        appliance_devices_error = await self.__load_devices_of_type(GoveeDeviceType.APPLIANCE_DEVICE)
+
+        if devices_error is not None or appliance_devices_error is not None:
+            err = ' ,'.join(filter(None, (devices_error, appliance_devices_error)))
+
+        # cache last get_devices result
+        return self._govee.devices, err
+
+    def _is_success_result_message(self, result) -> bool:
+        """Given an aiohttp result checks if it is a success result."""
+        return "message" in result and result["message"] == "Success"
+
+    async def __load_devices_of_type(self, devices_type: GoveeDeviceType) -> str:
+        """Loads devices of a specific type from the api"""
+        _LOGGER.debug(f"__load_devices_of_type {devices_type}")
+        device_url = _API_DEVICES if devices_type == GoveeDeviceType.DEVICE else _API_APPLIANCE_DEVICES
+        err = None
+
+        async with self._api_get(url=device_url) as response:
             if response.status == 200:
                 result = await response.json()
                 if (
-                    "data" in result
-                    and "devices" in result["data"]
-                    and isinstance(result["data"]["devices"], list)
+                        "data" in result
+                        and "devices" in result["data"]
+                        and isinstance(result["data"]["devices"], list)
                 ):
                     timestamp = self._govee._utcnow()
                     learning_infos = await self._govee._learning_storage._read_cached()
@@ -276,10 +297,21 @@ class GoveeApi(object):
                             )
                             config_offline_is_off = learning_info.config_offline_is_off
 
+                        modes = []
+                        if ("properties" in item
+                                and "mode" in item["properties"]
+                                and "options" in item["properties"]["mode"]
+                                and isinstance(item["properties"]["mode"]["options"], list)):
+                            for current_mode in item["properties"]["mode"]["options"]:
+                                modes.append(GoveeDeviceMode(name=current_mode["name"], value=current_mode["value"]))
+
                         # create device DTO
                         self._govee._devices[device_str] = GoveeDevice(
+                            mode=None,
                             device=device_str,
                             model=model_str,
+                            modes=modes,
+                            device_type=devices_type,
                             device_name=item["deviceName"],
                             controllable=item["controllable"],
                             retrievable=is_retrievable,
@@ -288,6 +320,7 @@ class GoveeApi(object):
                             support_brightness="brightness" in item["supportCmds"],
                             support_color="color" in item["supportCmds"],
                             support_color_tem="colorTem" in item["supportCmds"],
+                            support_mode="mode" in item["supportCmds"],
                             # defaults for state
                             online=True,
                             power_state=False,
@@ -315,14 +348,10 @@ class GoveeApi(object):
                 result = await response.text()
                 err = f"API-Error {response.status}: {result}"
         # cache last get_devices result
-        return self._govee.devices, err
-
-    def _is_success_result_message(self, result) -> bool:
-        """Given an aiohttp result checks if it is a success result."""
-        return "message" in result and result["message"] == "Success"
+        return err
 
     async def _turn(
-        self, device: Union[str, GoveeDevice], onOff: str
+            self, device: Union[str, GoveeDevice], onOff: str
     ) -> Tuple[bool, str]:
         """Turn command called by turn_on and turn_off."""
         success = False
@@ -344,7 +373,7 @@ class GoveeApi(object):
         return success, err
 
     async def set_brightness(
-        self, device: Union[str, GoveeDevice], brightness: int
+            self, device: Union[str, GoveeDevice], brightness: int
     ) -> Tuple[bool, str]:
         """Set brightness to 0-254."""
         success = False
@@ -403,7 +432,7 @@ class GoveeApi(object):
         return success, err
 
     async def set_color_temp(
-        self, device: Union[str, GoveeDevice], color_temp: int
+            self, device: Union[str, GoveeDevice], color_temp: int
     ) -> Tuple[bool, str]:
         """Set color temperature to 2000-9000."""
         success = False
@@ -424,8 +453,30 @@ class GoveeApi(object):
                     )
         return success, err
 
+    async def set_device_mode(self, device: Union[str, GoveeDevice], device_mode: GoveeDeviceMode) -> Tuple[bool, str]:
+        """Set the mode of the device"""
+        success = False
+        err = None
+        device_str, device = self._govee._get_device(device)
+        if not device:
+            err = f"Invalid device {device_str}, {device}"
+        elif not device.support_mode:
+            err = f"Device {device_str}, {device} not supports the setting of a mode"
+        elif device_mode is None:
+            err = f"Passed mode is none"
+        else:
+            result, err = await self._control(device, "mode", device_mode.value)
+            if not err:
+                success = self._is_success_result_message(result)
+                if success:
+                    self._govee._update_state(
+                        GoveeSource.HISTORY, device, "mode", device_mode
+                    )
+
+        return success, err
+
     async def set_color(
-        self, device: Union[str, GoveeDevice], color: Tuple[int, int, int]
+            self, device: Union[str, GoveeDevice], color: Tuple[int, int, int]
     ) -> Tuple[bool, str]:
         """Set color (r, g, b) where each value may be in range 0-255 """
         success = False
@@ -466,7 +517,7 @@ class GoveeApi(object):
         return seconds_lock
 
     async def _control(
-        self, device: Union[str, GoveeDevice], command: str, params: Any
+            self, device: Union[str, GoveeDevice], command: str, params: Any
     ) -> Tuple[Any, str]:
         """Control led strips and bulbs."""
         device_str, device = self._govee._get_device(device)
@@ -493,15 +544,19 @@ class GoveeApi(object):
                 await asyncio.sleep(seconds_locked)
             json = {"device": device.device, "model": device.model, "cmd": cmd}
             await self.rate_limit_delay()
+
+            api_url = _API_DEVICES_CONTROL if device.device_type == GoveeDeviceType.DEVICE \
+                else _API_APPLIANCE_DEVICES_CONTROL
+
             async with self._api_put(
-                url=_API_DEVICES_CONTROL, json=json
+                    url=api_url, json=json
             ) as response:
                 if response.status == 200:
                     device.lock_set_until = (
-                        self._govee._utcnow() + DELAY_SET_FOLLOWING_SET_SECONDS
+                            self._govee._utcnow() + DELAY_SET_FOLLOWING_SET_SECONDS
                     )
                     device.lock_get_until = (
-                        self._govee._utcnow() + DELAY_GET_FOLLOWING_SET_SECONDS
+                            self._govee._utcnow() + DELAY_GET_FOLLOWING_SET_SECONDS
                     )
                     result = await response.json()
                 else:
@@ -511,7 +566,7 @@ class GoveeApi(object):
         return result, err
 
     async def _get_device_state(
-        self, device: Union[str, GoveeDevice]
+            self, device: Union[str, GoveeDevice]
     ) -> Tuple[GoveeDevice, str]:
         """Get state for one specific device."""
         device_str, device = self._govee._get_device(device)
@@ -571,16 +626,16 @@ class GoveeApi(object):
                                 _LOGGER.debug(f"unknown state property '{prop}'")
 
                         if not prop_online and (
-                            self._govee.config_offline_is_off is not None
-                            and self._govee.config_offline_is_off
-                            or self._govee.config_offline_is_off is None
-                            and device.config_offline_is_off
+                                self._govee.config_offline_is_off is not None
+                                and self._govee.config_offline_is_off
+                                or self._govee.config_offline_is_off is None
+                                and device.config_offline_is_off
                         ):
                             prop_power_state = False
                         # autobrightness learning
                         if device.learned_get_brightness_max is None or (
-                            device.learned_get_brightness_max == 100
-                            and prop_brightness > 100
+                                device.learned_get_brightness_max == 100
+                                and prop_brightness > 100
                         ):
                             device.learned_get_brightness_max = (
                                 100  # assumption, as we didn't get anything higher

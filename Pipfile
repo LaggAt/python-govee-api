@@ -4,6 +4,9 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+aiohttp = "*"
+certifi = "*"
+pytest = "*"
 
 [dev-packages]
 
