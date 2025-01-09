@@ -29,7 +29,7 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.12",
     # dependency_links=['https://codeload.github.com/chvolkmann/govee_btled/tarball/master#egg=govee_btled-1.0'],
     install_requires=INSTALL_REQUIRES,
 )
