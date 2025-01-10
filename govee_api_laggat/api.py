@@ -250,6 +250,14 @@ class GoveeApi(object):
                             continue
                         model_str = item["model"]
                         is_retrievable = item["retrievable"]
+                        properties = item.get("properties", {})
+                        color_temp_range = \
+                            properties.get("colorTem", {}).get("range")
+                        color_temp_min = 2000
+                        color_temp_max = 9000
+                        if color_temp_range:
+                            color_temp_min = color_temp_range["min"]
+                            color_temp_max = color_temp_range["max"]
 
                         # assuming defaults for learned/configured values
                         learned_set_brightness_max = None
@@ -294,6 +302,8 @@ class GoveeApi(object):
                             brightness=0,
                             color=(0, 0, 0),
                             color_temp=0,
+                            color_temp_min=color_temp_min,
+                            color_temp_max=color_temp_max,
                             timestamp=timestamp,
                             source=GoveeSource.HISTORY,
                             error=None,
@@ -405,14 +415,17 @@ class GoveeApi(object):
     async def set_color_temp(
         self, device: Union[str, GoveeDevice], color_temp: int
     ) -> Tuple[bool, str]:
-        """Set color temperature to 2000-9000."""
+        """Set color temperature."""
         success = False
         err = None
         device_str, device = self._govee._get_device(device)
         if not device:
             err = f"Invalid device {device_str}, {device}"
-        elif color_temp < 2000 or color_temp > 9000:
-            err = f"set_color_temp: invalid value {color_temp}, allowed range 2000-9000"
+        elif not (device.color_temp_min <= color_temp <= device.color_temp_max):
+            err = (
+                f"set_color_temp: invalid value {color_temp}, "
+                f"allowed range {device.color_temp_min}-{device.color_temp_max}"
+            )
         else:
             command = "colorTem"
             result, err = await self._control(device, command, color_temp)

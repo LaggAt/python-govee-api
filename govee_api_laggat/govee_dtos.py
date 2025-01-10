@@ -30,6 +30,8 @@ class GoveeDevice(object):
     brightness: int  # brightness state
     color: Tuple[int, int, int]  # color state
     color_temp: int  # color temperature state
+    color_temp_min: int  # supported minimum color temperature
+    color_temp_max: int  # supported maximum color temperature
     timestamp: int  # timestamp of last change
     source: GoveeSource  # source of the last change, API or History
     error: str  # last and active error
