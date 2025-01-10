@@ -16,10 +16,10 @@ INSTALL_REQUIRES = [
 
 setuptools.setup(
     name="govee_api_laggat",
-    version="0.2.2",
+    version="0.3.0",
     author="Florian Lagg @LaggAt",
     author_email="florian.lagg@gmail.com",
-    description="Implementation of the govee API to control LED strips and bulbs.",
+    description="Implementation of the govee API to control LED strips, bulbs and appliances",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/LaggAt/python-govee-api",
